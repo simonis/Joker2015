@@ -1,0 +1,1337 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN"
+"http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+<html xml:lang="en" xmlns="http://www.w3.org/1999/xhtml">
+
+  <head>
+    <meta charset="utf-8" />
+
+    <title>How "final" is final?</title>
+
+    <meta name="description" content="Musings about 'finality' in the Java language and the Java Virtual Machine." />
+    <meta name="author" content="Volker H. Simonis" />
+
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, minimal-ui" />
+
+    <link rel="stylesheet" href="reveal.js/css/reveal.css" />
+    <link rel="stylesheet" href="reveal.js/css/theme/jet2015.css" id="theme" />
+
+    <!-- Code syntax highlighting -->
+    <link rel="stylesheet" href="reveal.js/lib/css/monokai_sublime.css" />
+
+  <style type="text/css">
+.scrollable {
+    bottom: 0px;
+    overflow-y: auto  !important;
+    overflow-x: hidden !important;
+}
+
+.reveal .big {
+    font-size: .8em;
+    line-height: 1.3em;
+}
+
+.reveal pre.console {
+    background-color: black;
+    color: #00ff00;
+}
+
+.reveal pre.noshadow {
+    border-radius: 0;
+    box-shadow: unset;
+}
+
+.reveal pre code {
+    max-height: 98%;
+}
+  </style>
+
+    <!-- Printing and PDF exports -->
+    <script>
+      var link = document.createElement( 'link' );
+      link.rel = 'stylesheet';
+      link.type = 'text/css';
+      link.href = window.location.search.match( /print-pdf/gi ) ? 'reveal.js/css/print/pdf.css' : 'reveal.js/css/print/paper.css';
+      document.getElementsByTagName( 'head' )[0].appendChild( link );
+    </script>
+
+    <!--[if lt IE 9]>
+    <script src="reveal.js/lib/js/html5shiv.js"></script>
+    <![endif]-->
+
+    <!--
+      Issue #1105: Keyboard shortcut to skip forward/back over fragments #1173
+      https://github.com/hakimel/reveal.js/pull/1173
+    -->
+  </head>
+
+  <body>
+
+    <div class="reveal">
+
+      <!-- Any section element inside of this container is displayed as a slide -->
+      <div class="slides">
+
+        <section>
+          <h1>How "<em>final</em>" is final?</h1>
+          <h4>Musings about <em>finality</em> in the Java language and VM</h4>
+          <p>
+            <small>Volker Simonis [Фолкер Симонис], SAP / <a href="mailto:volker.simonis@gmail.com">volker.simonis@gmail.com</a></small>
+          </p>
+        </section>
+
+
+        <section data-background="images/zhivaya-i-myortvaya-voda.jpg"
+                 data-background-size="1168px">
+          &nbsp;
+        </section>
+
+        <section>
+          <h2>Java's definition of &ldquo;final&rdquo;</h2>
+          <blockquote>
+            <p>
+              &ldquo;A <code>final</code> variable may only be assigned to
+              once..&rdquo;
+            </p>
+            <p>
+              &ldquo;Once a final variable has been assigned, it
+              always contains the same value.&rdquo;
+            </p>
+            <footer>
+              <cite><a href="http://docs.oracle.com/javase/specs/jls/se8/html/jls-4.html#jls-4.12.4">The Java Language Specification, §4.12.4. final Variables</a></cite>
+            </footer>
+          </blockquote>
+        </section>
+
+        <section>
+          <pre class="big noshadow" data-trim="true">
+            <code class="java" data-trim="true">
+class Test0 {
+  private final int f;
+  public Test0() {
+  }
+}
+            </code>
+          </pre>
+
+          <p class="fragment">
+            <span style="color:red">Compile time error:</span> <em>variable <code>f</code> might not have been initialized.</em>
+          </p>
+        </section>
+
+        <section>
+          <pre class="big noshadow" data-trim="true">
+            <code class="java" data-trim="true">
+class TestA {
+  private final int f = 0;
+  public TestA(int f) {
+    this.f = f;
+  }
+}
+            </code>
+          </pre>
+
+          <p class="fragment">
+            <span style="color:red">Compile time error:</span> <em>cannot assign a value to final variable <code>f</code></em>
+          </p>
+        </section>
+
+        <section>
+          <pre class="big noshadow" data-trim="true">
+            <code class="java" data-trim="true">
+class TestB {
+  private final int f;
+  {
+    f = 0; // Instance initializer
+  }
+  public TestB(int f) {
+    this.f = f;
+  }
+}
+            </code>
+          </pre>
+
+          <p class="fragment">
+            <span style="color:red">Compile time error:</span> <em>cannot assign a value to final variable <code>f</code></em>
+          </p>
+        </section>
+
+        <section>
+          <pre class="big noshadow" data-trim="true">
+            <code class="java" data-trim="true">
+class TestC {
+  private final int f;
+  public TestC(int f) {
+    this.f = f;
+  }
+}
+            </code>
+          </pre>
+
+          <p class="fragment">
+            <span style="color:green">OK:</span> since Java 1.1 (&ldquo;<em>blank final</em>&rdquo;).
+          </p>
+        </section>
+
+        <section>
+          <pre class="big noshadow" data-trim="true">
+            <code class="java" data-trim="true">
+class TestF {
+  private final int f;
+  public TestF(int f) {
+    if (f > 0) {
+      this.f = f;
+    } else {
+      this.f = 42;
+    }
+  }
+}
+            </code>
+          </pre>
+
+          <p class="fragment">
+            <span style="color:green">OK:</span> <code>javac</code> does a certain amount of flow analysis..
+          </p>
+        </section>
+
+        <section>
+          <pre class="big noshadow" data-trim="true">
+            <code class="java" data-trim="true" data-noescape="true">
+<![CDATA[
+class TestG {
+  private final int f;
+  public TestG(int f) {
+    if (f > 0) {
+      this.f = f;
+    }
+    if (f <= 0) {
+      this.f = 42;
+    }
+  }
+}
+]]>
+            </code>
+          </pre>
+
+          <p class="fragment">
+             ..but not too much!<br/><br/>
+            <span style="color:red">Compile time error:</span> <em>variable <code>f</code> might already have been initialized.</em>
+          </p>
+        </section>
+
+        <section>
+          <pre class="big noshadow" data-trim="true">
+            <code class="java" data-trim="true">
+class TestG1 {
+  private final int f;
+  public TestG1(int f) {
+    try {
+      this.f = f;
+    }
+    catch (Exception e) {
+
+    }
+  }
+}
+            </code>
+          </pre>
+
+          <p class="fragment">
+            <span style="color:red">Compile time error:</span> <em>variable <code>f</code> might not have been initialized.</em>
+          </p>
+        </section>
+
+        <section>
+          <pre class="big noshadow" data-trim="true">
+            <code class="java" data-trim="true">
+class TestG1 {
+  private final int f;
+  public TestG1(int f) {
+    try {
+      this.f = f;
+    }
+    catch (Exception e) {
+      this.f = 42;
+    }
+  }
+}
+            </code>
+          </pre>
+
+          <p class="fragment">
+            <span style="color:red">Compile time error:</span> <em>variable <code>f</code> might already have been initialized.</em>
+          </p>
+        </section>
+
+        <section>
+          <div style="width: 100%">
+            <div style="float: left; width: 40%">
+
+              <pre class="big noshadow" data-trim="true">
+                <code class="java" data-trim="true">
+class TestG1 {
+  public int f;
+  public TestG1(int f) {
+    try {
+      this.f = f;
+    }
+    catch (Exception e) {
+      this.f = 42;
+    }
+  }
+}
+                </code>
+              </pre>
+
+              <p>Without <code>final</code> <span style="color:green">OK</span></p>
+
+            </div>
+            <div style="float: right; width: 60%">
+
+              <pre class="big noshadow" data-trim="true">
+                <code class="java" data-trim="true" data-noescape="true">
+<![CDATA[
+class TestG1 {
+  public int f;
+  public TestG1(int);
+    0: aload_0
+    1: invokespecial #1 // Object.<init>
+    4: aload_0
+    5: iload_1
+    6: putfield      #2 // Field f:I
+    9: goto          19
+   12: astore_2
+   13: aload_0
+   14: bipush        42
+   16: putfield      #2 // Field f:I
+   19: return
+ Exception table:
+    from    to  target type
+       4     9    12   Exception
+]]>
+                </code>
+              </pre>
+            </div>
+            <br style="clear: both;"/>
+          </div>
+        </section>
+
+        <section>
+          <div style="width: 100%">
+            <div style="float: left; width: 40%">
+
+              <pre class="big noshadow" data-trim="true">
+                <code class="java" data-trim="true">
+class TestG1 {
+  public final int f;
+  public TestG1(int f) {
+    try {
+      this.f = f;
+    }
+    catch (Exception e) {
+      this.f = 42;
+    }
+  }
+}
+                </code>
+              </pre>
+
+              <p>With <code>final</code> compile <span style="color:red">Error</span>!</p>
+              <p><span style="color:green">But</span> we can generate the Bytecode:</p>
+
+            </div>
+            <div style="float: right; width: 60%">
+
+              <pre class="big noshadow" data-trim="true">
+                <code class="java" data-trim="true" data-noescape="true">
+<![CDATA[
+class TestG1 {
+  public final int f;
+  public TestG1(int);
+    0: aload_0
+    1: invokespecial #1 // Object.<init>
+    4: aload_0
+    5: iload_1
+    6: putfield      #2 // Field f:I
+    9: goto          19
+   12: astore_2
+   13: aload_0
+   14: bipush        42
+   16: putfield      #2 // Field f:I
+   19: return
+ Exception table:
+    from    to  target type
+       4     9    12   Exception
+]]>
+                </code>
+              </pre>
+            </div>
+            <br style="clear: both;"/>
+          </div>
+        </section>
+
+        <section>
+          <h2>The JVM's definition of &ldquo;final&rdquo;</h2>
+          <blockquote>
+            <p>
+              &ldquo;If the field is final the <code>putfield</code>
+              instruction must occur in <br/> an instance initialization
+              method (&lt;init&gt;) of the current class.&rdquo;
+            </p>
+            <footer>
+              <cite><a href="http://docs.oracle.com/javase/specs/jvms/se8/html/jvms-6.html#jvms-6.5.putfield">The Java Virtual Machine Specification, §6.5.putfield</a></cite>
+            </footer>
+          </blockquote>
+
+          <p>No or multiple assignmets within constructors are possible according to the JVMS.</p>
+        </section>
+
+        <section style="height: 100%;">
+          <h2 style="text-transform: none;">Using <code>jdk.internal.org.objectweb.asm</code></h2>
+          <pre class="big noshadow scrollable" style="height: 70%;" data-trim="true">
+            <code class="java" data-trim="true" data-noescape="true">
+<![CDATA[
+import jdk.internal.org.objectweb.asm.ClassWriter;
+import jdk.internal.org.objectweb.asm.Label;
+import jdk.internal.org.objectweb.asm.MethodVisitor;
+import static jdk.internal.org.objectweb.asm.Opcodes.*;
+
+static void testG1_ASM() throws Exception {
+  ClassWriter cw = new ClassWriter(ClassWriter.COMPUTE_FRAMES);
+  cw.visit(V1_8, ACC_PUBLIC, "TestG1", null, "java/lang/Object", null);
+  cw.visitField(ACC_PUBLIC | ACC_FINAL, "f", "I", null, null);
+  MethodVisitor constr = cw.visitMethod(ACC_PUBLIC, "<init>", "(I)V", null, null);
+  Label l_try_beg = new Label(), l_try_end = new Label();
+  Label l_catch = new Label(), l_end = new Label();
+  constr.visitCode();
+  constr.visitVarInsn(ALOAD, 0);
+  constr.visitMethodInsn(INVOKESPECIAL, "java/lang/Object", "<init>", "()V");
+  constr.visitLabel(l_try_beg);
+  constr.visitVarInsn(ALOAD, 0);
+  constr.visitVarInsn(ILOAD, 1);
+  constr.visitFieldInsn(PUTFIELD, "TestG1", "f", "I");
+  constr.visitLabel(l_try_end);
+  constr.visitJumpInsn(GOTO, l_end);
+  constr.visitLabel(l_catch);
+  constr.visitVarInsn(ASTORE, 2);
+  constr.visitVarInsn(ALOAD, 0);
+  constr.visitIntInsn(BIPUSH, 42);
+  constr.visitFieldInsn(PUTFIELD, "TestG1", "f", "I");
+  constr.visitLabel(l_end);
+  constr.visitInsn(RETURN);
+  constr.visitTryCatchBlock(l_try_beg, l_try_end, l_catch, "java/lang/Exception");
+  // max stack and max locals are automatically computed (because of the
+  // 'ClassWriter.COMPUTE_FRAMES' option) in the ClassWriter constructor,
+  // but we need this call nevertheless in order for the computation to happen!
+  constr.visitMaxs(0, 0);
+  constr.visitEnd();
+
+  // Get the bytes of the class..
+  byte[] b = cw.toByteArray();
+  // ..and write them into a class file (for debugging)
+  FileOutputStream fos = new FileOutputStream("TestG1.class");
+  fos.write(b);
+  fos.close();
+
+  // Load the newly created class..
+  Final f = new Final();
+  Class<?> testG1Class = f.defineClass("TestG1", b, 0, b.length);
+  // ..get the constructor..
+  Constructor c = testG1Class.getConstructor(int.class);
+  // ..and create a new "TestG1" object
+  Object testG1 = c.newInstance(42);
+  Field int_f = testG1Class.getDeclaredField("f");
+  System.out.println("testG1.f = " + int_f.getInt(testG1));
+}
+]]>
+            </code>
+          </pre>
+          <p>Compile with &ldquo;<code>javac javac -XDignore.symbol.file=true</code>&rdquo;</p>
+        </section>
+
+        <section>
+          <pre class="big noshadow" data-trim="true">
+            <code class="java" data-trim="true">
+class TestH {
+  private final int f;
+  {
+    foo();
+  }
+  public TestH(int f) {
+    this.f = f;
+    System.out.println(this + ".f = " + this.f);
+  }
+  public void foo() {
+    System.out.println(this + ".f = " + this.f);
+  }
+}
+new TestH(42);
+            </code>
+          </pre>
+          <br/>
+          <pre class="fragment big console" data-trim="true">
+TestH@15db9742.f = 0
+TestH@15db9742.f = 42</pre>
+
+          <p class="fragment">
+            SEI CERT: <a href="https://www.securecoding.cert.org/confluence/display/java/TSM01-J.+Do+not+let+the+this+reference+escape+during+object+construction?src=contextnavpagetreemode">TSM01-J. Do not let the "this" reference escape during object construction!</a>
+          </p>
+        </section>
+
+        <section>
+          <pre class="big noshadow" data-trim="true">
+            <code class="java" data-trim="true">
+class TestH2 {
+  private static final int f;
+  static {
+    f = foo();
+  }
+  public TestH2() {
+    System.out.println(TestH2.class + ".f = " + f);
+  }
+  static int foo() {
+    System.out.println(TestH2.class + ".f = " + f);
+    return 42;
+  }
+}
+new TestH2();
+            </code>
+          </pre>
+          <br/>
+          <pre class="fragment big console" data-trim="true">
+class Final$TestH2.f = 0
+class Final$TestH2.f = 42</pre>
+
+          <p class="fragment">
+            JDK9 Bug: <a href="https://bugs.openjdk.java.net/browse/JDK-8087161">8087161: Fails to start up initialize system class loader on unsupported charset</a>
+          </p>
+	  <aside class="notes">
+<![CDATA[
+            ServiceLoader calls ClassLoader.getBootstrapResources()
+which calls sun.misc.Launcher.getBootstrapClassPath(). This leads to
+another problem during class initialization of sun.misc.Launcher if
+running on an unsupported locale.
+
+The first thing done in sun.misc.Launcher.<clinit> is the
+initialisation of the bootstrap URLClassPath in the Launcher. However
+this initialisation will eventually call Charset.isSupported() and if
+we are running on an unsupported locale this will inevitably end in
+another recursive call to ServiceLoader. But as explained below,
+ServiceLoader will query the Launcher's bootstrap URLClassPath which
+will be still uninitialized at that point.
+]]>
+	  </aside>
+        </section>
+
+        <section>
+          <pre class="big noshadow" data-trim="true">
+            <code class="java" data-trim="true">
+class TestI {
+  public final int f;
+  public TestI(int f) {
+    this.f = f;
+  }
+  public void set(int f) {
+    // change value of 'f'
+  }
+}
+
+TestI i = new TestI(42);
+i.set(99);
+System.out.println("i.f = " + i.f);
+            </code>
+          </pre>
+          <br/>
+          <pre class="fragment big console" data-trim="true">
+i.f = 99</pre>
+
+          <p class="fragment">
+            <span style="color:red">Question:</span> How can we change the value of 'f' in Java?
+          </p>
+        </section>
+
+        <section>
+          <h2>JNI</h2>
+          <blockquote>
+            <p style="text-align:justify">
+              &ldquo;The
+              JNI <span style="text-decoration:underline">does not
+              enforce</span> class, field, and method access control
+              restrictions that can be expressed at the Java
+              programming language level through the use of modifiers
+              such as private and final.&rdquo;
+            </p>
+            <footer>
+              <cite><a href="https://www.fer.unizg.hr/_download/repository/jni.pdf">The Java Native Interface: Programmer's Guide and Specification, §10.9 Violating Access Control Rules</a></cite>
+            </footer>
+          </blockquote>
+        </section>
+
+        <section>
+          <pre class="big noshadow" data-trim="true">
+            <code class="java" data-trim="true">
+class TestI {
+  ...
+  public native void set(int f);
+  static {
+    System.loadLibrary("TestI1");
+  }
+}
+            </code>
+          </pre>
+          <pre class="big noshadow" data-trim="true">
+            <code class="hpp" data-trim="true" data-noescape="true">
+<![CDATA[
+extern "C" JNIEXPORT
+void JNICALL Java_TestI1_set(JNIEnv *env, jobject obj, jint val) {
+
+  jclass thisClass = env->GetObjectClass(obj);
+
+  jfieldID fid = env->GetFieldID(thisClass, "f", "I");
+
+  env->SetIntField(obj, fid, val);
+}
+]]>
+            </code>
+          </pre>
+          <p class="fragment">
+            JDK9 RFE: <a href="https://bugs.openjdk.java.net/browse/JDK-8058164">8058164: final fields in objects need to support inlining optimizations</a>
+          </p>
+        </section>
+
+        <section>
+          <h2>Reflection</h2>
+          <pre class="big noshadow" data-trim="true">
+            <code class="java" data-trim="true">
+<![CDATA[
+static class TestI {
+  ...
+  public void set(int f) throws Exception {
+    java.lang.reflect.Field field = this.getClass().getDeclaredField("f");
+    field.setAccessible(true);
+    field.setInt(this, f);
+  }
+}
+]]>
+            </code>
+          </pre>
+        </section>
+
+        <section>
+          <section>
+            <h2>Reflection (static final fields)</h2>
+            <pre class="big noshadow" data-trim="true">
+              <code class="java" data-trim="true">
+<![CDATA[
+public class TestJ2 {
+  public static final int f;
+  static { f = 42; }
+  ...
+  public static void set(int f) throws Exception {
+    java.lang.reflect.Field field = TestJ2.class.getDeclaredField("f");
+    field.setAccessible(true);
+    field.setInt(null, f);
+  }
+
+  public static void main(String[] args) throws Exception {
+    System.out.println("TestJ2.f = " + TestJ2.f);
+    TestJ2.set(99);
+    System.out.println("TestJ2.f = " + TestJ2.f);
+  }
+}
+]]>
+              </code>
+            </pre>
+          </section>
+
+          <section>
+            <h2>Reflection (static final fields)</h2>
+            <pre class="big noshadow" data-trim="true">
+              <code class="java" data-trim="true">
+<![CDATA[
+Exception in thread "main" java.lang.IllegalAccessException:
+  Can not set static final int field TestJ2.f to (int)99
+
+at sun.reflect.UnsafeFieldAccessorImpl.throwFinalFieldIllegalAccessException(UnsafeFieldAccessorImpl.java:76)
+at sun.reflect.UnsafeFieldAccessorImpl.throwFinalFieldIllegalAccessException(UnsafeFieldAccessorImpl.java:100)
+at sun.reflect.UnsafeQualifiedStaticIntegerFieldAccessorImpl.setInt(UnsafeQualifiedStaticIntegerFieldAccessorImpl.java:129)
+at java.lang.reflect.Field.setInt(Field.java:949)
+at TestJ2.set(TestJ2.java:19)
+at TestJ2.main(TestJ2.java:24)
+]]>
+              </code>
+            </pre>
+          </section>
+
+          <section>
+            <h2>Reflection (static final fields)</h2>
+            <pre class="big noshadow" data-trim="true">
+              <code class="java" data-trim="true">
+<![CDATA[
+public class TestJ2 {
+  public static final int f;
+  static { f = 42; }
+  ...
+  public static void set(int f) throws Exception {
+    java.lang.reflect.Field field = TestJ2.class.getDeclaredField("f");
+
+    Field modifiersField = Field.class.getDeclaredField("modifiers");
+    modifiersField.setAccessible(true);
+    modifiersField.setInt(field, field.getModifiers() & ~Modifier.FINAL);
+
+    // field.setAccessible(true);
+    field.setInt(null, f);
+  }
+  ...
+}
+]]>
+              </code>
+            </pre>
+          </section>
+        </section>
+
+        <section>
+          <section>
+            <h2>Reflection (?$!%§)</h2>
+            <pre class="big noshadow" data-trim="true">
+              <code class="java" data-trim="true">
+<![CDATA[
+  static class TestJ3 {
+    ...
+    public static void set(String s) throws Exception {
+      java.lang.reflect.Field field = TestJ3.class.getDeclaredField("f");
+
+      Field modifiersField = Field.class.getDeclaredField("modifiers");
+      modifiersField.setAccessible(true);
+      modifiersField.setInt(field, field.getModifiers() & ~Modifier.FINAL);
+
+      Field typeField = Field.class.getDeclaredField("type");  // Change
+      typeField.setAccessible(true);                           // the field's
+      typeField.set(field, String.class);                      // type!
+
+      field.setAccessible(true);
+      field.set(null, s);
+    ...
+]]>
+              </code>
+            </pre>
+          </section>
+
+          <section>
+            <h2>Reflection (?$!%§)</h2>
+            <pre class="big noshadow" data-trim="true">
+              <code class="java" data-trim="true">
+<![CDATA[
+...
+public static void main(String[] args) throws Exception {
+  System.out.println("TestJ3.f = " + TestJ3.f);
+  TestJ3.set("Volker");
+  System.out.println("TestJ3.f = " + TestJ3.f);
+}
+]]>
+              </code>
+            </pre>
+          <br/>
+          <pre class="fragment big console" data-trim="true">
+TestJ3.f = 42
+TestJ3.f = -667891199
+</pre>
+          <p class="fragment">
+            <a href="https://bugs.openjdk.java.net/browse/JDK-8055530">JDK-8055530: assert(_exits.control()->is_top() || !_gvn.type(ret_phi)->empty()) failed:<br/>return value must be well defined</a>
+          </p>
+          </section>
+
+          <section>
+            <h2>Reflection (?$!%§)</h2>
+            <pre class="big noshadow" data-trim="true">
+              <code class="java" data-trim="true">
+<![CDATA[
+# To suppress the following error report, specify this argument
+# after -XX: or in .hotspotrc:  SuppressErrorAt=\g1SATBCardTableModRefBS.cpp:45
+#
+# A fatal error has been detected by the Java Runtime Environment:
+#
+#  Internal Error (C:\Software\OpenJDK\jdk9-dev\hotspot\src\share\vm\gc\g1\g1SATBCardTableModRefBS.cpp:45), pid=21520, tid=24604
+#  assert(pre_val->is_oop(true)) failed: Error
+#
+# JRE version: OpenJDK Runtime Environment (9.0) (build 1.9.0-internal-debug-d046063_2015_10_07_23_02-b00)
+# Java VM: OpenJDK 64-Bit Server VM (1.9.0-internal-d046063_2015_10_07_23_02-b00, mixed mode, tiered, compressed oops, g1 gc, windows-amd64)
+# Core dump will be written. Default location: C:\Users\D046063\public_html\hotspot\Joker2015\examples\hs_err_pid21520.mdmp
+#
+# An error report file with more information is saved as:
+# C:\Users\D046063\public_html\hotspot\Joker2015\examples\hs_err_pid21520.log
+]]>
+              </code>
+            </pre>
+          </section>
+        </section>
+
+        <section>
+          <h2>Method Handles</h2>
+          <pre class="big noshadow" data-trim="true">
+            <code class="java" data-trim="true">
+<![CDATA[
+static class TestI {
+  ...
+  public void set(int f) throws Throwable {
+    java.lang.reflect.Field field = this.getClass().getDeclaredField("f");
+    field.setAccessible(true);
+    java.lang.invoke.MethodHandle setter =
+      java.lang.invoke.MethodHandles.lookup().unreflectSetter(field);
+    setter.invokeExact(this, f);
+  }
+}
+]]>
+            </code>
+          </pre>
+        </section>
+
+        <section>
+          <h2 style="text-transform: none;"><code>sun.misc.Unsafe</code></h2>
+          <pre class="big noshadow" data-trim="true">
+            <code class="java" data-trim="true">
+<![CDATA[
+static class TestI {
+  ...
+  static sun.misc.Unsafe UNSAFE;
+  static {
+    try {
+      java.lang.reflect.Constructor<sun.misc.Unsafe> unsafeConstructor =
+        sun.misc.Unsafe.class.getDeclaredConstructor();
+      unsafeConstructor.setAccessible(true);
+      UNSAFE = unsafeConstructor.newInstance();
+    } catch (Exception e) {}
+  }
+  public void set(int f) throws Exception {
+    java.lang.reflect.Field field = this.getClass().getDeclaredField("f");
+    UNSAFE.putInt(this, UNSAFE.objectFieldOffset(field), f);
+  }
+}
+]]>
+            </code>
+          </pre>
+        </section>
+
+        <section>
+          <section>
+            <pre class="big noshadow" data-trim="true">
+              <code class="java" data-trim="true">
+<![CDATA[
+static class TestM {
+  public final int f = 42;
+  public TestM() {
+
+  }
+  public void set(int f);  // Change 'f'
+}
+
+TestM testM = new TestM();
+System.out.println((testM.f == 42 ? "Unchanged " : "Changed   ") +
+                   TestM.class.getDeclaredField("f").getInt(testM));
+testM.set(99);
+System.out.println((testM.f == 42 ? "Unchanged " : "Changed   ") +
+                   TestM.class.getDeclaredField("f").getInt(testM));
+]]>
+              </code>
+            </pre>
+            <br/>
+            <pre class="fragment big console" data-trim="true">
+Unchanged 42
+Unchanged 99
+            </pre>
+          </section>
+          <section>
+            <pre class="big noshadow" data-trim="true">
+              <code class="java" data-trim="true">
+<![CDATA[
+...
+23: bipush        42
+25: bipush        42
+27: if_icmpne     35
+30: ldc           #14 // String Unchanged
+32: goto          37
+35: ldc           #15 // String Changed
+37: invokevirtual #16 // Method java/lang/StringBuilder.append()
+...
+]]>
+              </code>
+            </pre>
+          </section>
+        </section>
+
+        <section>
+          <section>
+            <pre class="big noshadow" data-trim="true">
+              <code class="java" data-trim="true">
+<![CDATA[
+static class TestM {
+  public final int f;
+  public TestM() {
+    f = 42;
+  }
+  public void set(int f);  // Change 'f'
+}
+
+TestM testM = new TestM();
+System.out.println((testM.f == 42 ? "Unchanged " : "Changed   ") +
+                   TestM.class.getDeclaredField("f").getInt(testM));
+testM.set(99);
+System.out.println((testM.f == 42 ? "Unchanged " : "Changed   ") +
+                   TestM.class.getDeclaredField("f").getInt(testM));
+]]>
+              </code>
+            </pre>
+            <br/>
+            <pre class="fragment big console" data-trim="true">
+Unchanged 42
+Changed   99
+            </pre>
+          </section>
+          <section>
+            <pre class="big noshadow" data-trim="true">
+              <code class="java" data-trim="true">
+<![CDATA[
+...
+18: aload_1           // Object testM:TestM
+19: getfield      #2  // Field f:I
+22: bipush        42
+24: if_icmpne     32
+27: ldc           #13 // String Unchanged
+29: goto          34
+32: ldc           #14 // String Changed
+34: invokevirtual #15 // Method java/lang/StringBuilder.append()
+...
+]]>
+              </code>
+            </pre>
+          </section>
+        </section>
+
+        <section>
+          <h2>Constant Variables</h2>
+          <blockquote>
+            <p>
+              &ldquo;We call a variable, of primitive type or type
+              String, that is <code>final</code> and<br/> initialized with
+              a compile-time constant expression a <em>constant
+              variable</em>.&rdquo;
+            </p>
+            <footer>
+              <cite><a href="http://docs.oracle.com/javase/specs/jls/se8/html/jls-4.html#jls-4.12.4">The Java Language Specification, §4.12.4. final Variables</a></cite>
+            </footer>
+          </blockquote>
+          <blockquote>
+            <p>
+              &ldquo;References to fields that are constant variables
+              are resolved at compile time to the constant value that
+              is denoted. No reference to such a constant field should
+              be present in the code...&rdquo;
+            </p>
+            <footer>
+              <cite><a href="http://docs.oracle.com/javase/specs/jls/se8/html/jls-4.html#jls-4.12.4">The Java Language Specification, §13.1. The Form of a Binary</a></cite>
+            </footer>
+          </blockquote>
+
+          <p>Constant variables are inlined by <code>javac</code> !</p>
+          <p>J. Bloch, N. Gafter - <a href="https://books.google.de/books?id=RM9sLE0ntQ0C&amp;pg=RA1-PT266&amp;lpg=RA1-PT266&amp;dq=bloch+gafter+java+puzzlers+%22Puzzle+93:+Class+Warfare%22&amp;source=bl&amp;ots=1_iBw7kbfQ&amp;sig=pybroSjE2vu_icftCDiUwsq5D8w&amp;hl=en&amp;sa=X&amp;ved=0CCYQ6AEwAWoVChMIiYCT25uByAIVRn8aCh33AAaG#v=onepage&amp;q=bloch%20gafter%20java%20puzzlers%20%22Puzzle%2093%3A%20Class%20Warfare%22&amp;f=false">&ldquo;Java Puzzlers&rdquo;, Nr. 93</a></p>
+        </section>
+
+        <section>
+        <section>
+          <div style="width: 100%">
+            <div style="float: left; width: 40%">
+
+              <pre class="big noshadow" data-trim="true">
+                <code class="java" data-trim="true" data-noescape="true">
+<![CDATA[
+class Test {
+  static final Test test =
+    new Test(42);
+  static void set_test(Test t);
+  final int f;
+  void set_f(int f);
+
+  public Test(int f) {
+    this.f = f;
+  }
+
+  public static int get_f() {
+    if (test.f == 42) {
+      return 42;
+    }
+    return test.f;
+  }
+  ...
+}
+]]>
+                </code>
+              </pre>
+            </div>
+            <div style="position:relative; float: right; width: 60%">
+<div style="position: absolute; left: 1em; top:0">
+
+              <pre class="big noshadow" data-trim="true">
+                <code class="java" data-trim="true" data-noescape="true">
+<![CDATA[
+System.out.println(Test.get_f());          
+
+Test.set_test(new Test(99));
+System.out.println(Test.get_f());
+
+Test test42 = new Test(42);
+Test.set_test(test42);
+for (int n = 0; n < 20000; n++)
+  if (Test.get_f() != 42)
+    System.out.println("!!!");
+
+Test.set_test(new Test(99));
+System.out.println(Test.get_f());
+
+Test.test.set_f(99);
+System.out.println(Test.get_f());
+
+test42.set_f(99);
+System.out.println(Test.get_f());
+]]>
+                </code>
+              </pre>
+</div>
+<div class="fragment" style="position: absolute; left: 1em; top:0;">
+
+              <pre class="big noshadow" data-trim="true">
+                <code class="java" data-trim="true" data-noescape="true">
+<![CDATA[
+System.out.println(Test.get_f());  // -> 42
+
+Test.set_test(new Test(99));
+System.out.println(Test.get_f());
+
+Test test42 = new Test(42);
+Test.set_test(test42);
+for (int n = 0; n < 20000; n++)
+  if (Test.get_f() != 42)
+    System.out.println("!!!");
+
+Test.set_test(new Test(99));
+System.out.println(Test.get_f());
+
+Test.test.set_f(99);
+System.out.println(Test.get_f());
+
+test42.set_f(99);
+System.out.println(Test.get_f());
+]]>
+                </code>
+              </pre>
+</div>
+<div class="fragment" style="position: absolute; left: 1em; top:0;">
+
+              <pre class="big noshadow" data-trim="true">
+                <code class="java" data-trim="true" data-noescape="true">
+<![CDATA[
+System.out.println(Test.get_f());  // -> 42
+
+Test.set_test(new Test(99));
+System.out.println(Test.get_f());  // -> 99
+
+Test test42 = new Test(42);
+Test.set_test(test42);
+for (int n = 0; n < 20000; n++)
+  if (Test.get_f() != 42)
+    System.out.println("!!!");
+
+Test.set_test(new Test(99));
+System.out.println(Test.get_f());
+
+Test.test.set_f(99);
+System.out.println(Test.get_f());
+
+test42.set_f(99);
+System.out.println(Test.get_f());
+]]>
+                </code>
+              </pre>
+</div>
+<div class="fragment" style="position: absolute; left: 1em; top:0;">
+
+              <pre class="big noshadow" data-trim="true">
+                <code class="java" data-trim="true" data-noescape="true">
+<![CDATA[
+System.out.println(Test.get_f());  // -> 42
+
+Test.set_test(new Test(99));
+System.out.println(Test.get_f());  // -> 99
+
+Test test42 = new Test(42);
+Test.set_test(test42);
+for (int n = 0; n < 20000; n++)
+  if (Test.get_f() != 42)          // -> 42
+    System.out.println("!!!");
+
+Test.set_test(new Test(99));
+System.out.println(Test.get_f());
+
+Test.test.set_f(99);
+System.out.println(Test.get_f());
+
+test42.set_f(99);
+System.out.println(Test.get_f());
+]]>
+                </code>
+              </pre>
+</div>
+<div class="fragment" style="position: absolute; left: 1em; top:0;">
+
+              <pre class="big noshadow" data-trim="true">
+                <code class="java" data-trim="true" data-noescape="true">
+<![CDATA[
+System.out.println(Test.get_f());  // -> 42
+
+Test.set_test(new Test(99));
+System.out.println(Test.get_f());  // -> 99
+
+Test test42 = new Test(42);
+Test.set_test(test42);
+for (int n = 0; n < 20000; n++)
+  if (Test.get_f() != 42)          // -> 42
+    System.out.println("!!!");
+
+Test.set_test(new Test(99));
+System.out.println(Test.get_f());  // -> 42
+
+Test.test.set_f(99);
+System.out.println(Test.get_f());
+
+test42.set_f(99);
+System.out.println(Test.get_f());
+]]>
+                </code>
+              </pre>
+</div>
+<div class="fragment" style="position: absolute; left: 1em; top:0;">
+
+              <pre class="big noshadow" data-trim="true">
+                <code class="java" data-trim="true" data-noescape="true">
+<![CDATA[
+System.out.println(Test.get_f());  // -> 42
+
+Test.set_test(new Test(99));
+System.out.println(Test.get_f());  // -> 99
+
+Test test42 = new Test(42);
+Test.set_test(test42);
+for (int n = 0; n < 20000; n++)
+  if (Test.get_f() != 42)          // -> 42
+    System.out.println("!!!");
+
+Test.set_test(new Test(99));
+System.out.println(Test.get_f());  // -> 42
+
+Test.test.set_f(99);
+System.out.println(Test.get_f());  // -> 42
+
+test42.set_f(99);
+System.out.println(Test.get_f());
+]]>
+                </code>
+              </pre>
+</div>
+<div class="fragment" style="position: absolute; left: 1em; top:0;">
+
+              <pre class="big noshadow" data-trim="true">
+                <code class="java" data-trim="true" data-noescape="true">
+<![CDATA[
+System.out.println(Test.get_f());  // -> 42
+
+Test.set_test(new Test(99));
+System.out.println(Test.get_f());  // -> 99
+
+Test test42 = new Test(42);
+Test.set_test(test42);
+for (int n = 0; n < 20000; n++)
+  if (Test.get_f() != 42)          // -> 42
+    System.out.println("!!!");
+
+Test.set_test(new Test(99));
+System.out.println(Test.get_f());  // -> 42
+
+Test.test.set_f(99);
+System.out.println(Test.get_f());  // -> 42
+
+test42.set_f(99);
+System.out.println(Test.get_f());  //  ???
+]]>
+                </code>
+              </pre>
+</div>
+
+            </div>
+            <br style="clear: both;"/>
+          </div>
+          </section>
+
+          <section>
+            <h2 style="text-transform: none;">With <code>-XX:-TrustFinalNonStaticFields</code> -&gt; 99</h2>
+            <pre class="big noshadow" data-trim="true">
+              <code class="x86asm" data-trim="true">
+<![CDATA[
+0x00007f5a6cd674e0: mov    %eax,-0x16000(%rsp) ; stack bang
+0x00007f5a6cd674e7: push   %rbp                ; push frame
+0x00007f5a6cd674e8: sub    0x10,%rsp
+
+0x00007f5a6cd674ec: mov    0xeb6ac950,%r10     ; {oop(a 'Test')}
+0x00007f5a6cd674f6: mov    0xc(%r10),%r11d     ;*getfield f
+                                               ; - Test::get_f@3
+0x00007f5a6cd674fa: cmp    0x2a,%r11d          ; 42
+0x00007f5a6cd674fe: jne    0x00007f5a6cd67511  ;*if_icmpne
+                                               ; - Test::get_f@8
+0x00007f5a6cd67500: mov    0x2a,%eax           ; 42
+0x00007f5a6cd67505: add    0x10,%rsp
+0x00007f5a6cd67509: pop    %rbp                ; pop frame
+0x00007f5a6cd6750a: test   %eax,0xa7d5af0(%rip); 0x00007f5a7753d000
+                                               ;   {poll_return}
+0x00007f5a6cd67510: ret
+]]>
+<!--
+000   B1: #     B3 B2 <- BLOCK HEAD IS JUNK   Freq: 1
+000     # stack bang (104 bytes)
+        pushq   rbp     # Save rbp
+        subq    rsp, #16        # Create frame
+
+00c     movq    R10, Test:exact * # ptr
+016     movl    R11, [R10 + #12 (8-bit)]         # int ! Field: Test.f
+01a     cmpl    R11, #42
+01e     jne,s   B3  P=0.000000 C=6700.000000
+01e
+020   B2: #     N1 <- B1  Freq: 1
+020     movl    RAX, #42        # int
+025     addq    rsp, 16 # Destroy frame
+        popq    rbp
+        testl   rax, [rip + #offset_to_poll_page] # Safepoint: poll for GC
+
+030     ret
+-->
+              </code>
+            </pre>
+          </section>
+
+          <section>
+            <h2 style="text-transform: none;">With <code>-XX:+TrustFinalNonStaticFields</code> -&gt; 42</h2>
+            <pre class="big noshadow" data-trim="true">
+              <code class="x86asm" data-trim="true">
+<![CDATA[
+0x00007f6b01196e60: mov    %eax,-0x16000(%rsp) ; stack bang
+0x00007f6b01196e67: push   %rbp                ; push frame
+0x00007f6b01196e68: sub    0x10,%rsp
+
+0x00007f6b01196e6c: mov    0x2a,%eax           ; 42
+0x00007f6b01196e71: add    0x10,%rsp
+0x00007f6b01196e75: pop    %rbp                ; pop frame
+0x00007f6b01196e76: test   %eax,0xc55f184(%rip); 0x00007f6b0d6f6000
+                                               ;   {poll_return}
+0x00007f6b01196e7c: ret
+]]>
+<!--
+000   B1: #     N1 <- BLOCK HEAD IS JUNK   Freq: 1
+000     # stack bang (96 bytes)
+        pushq   rbp     # Save rbp
+        subq    rsp, #16        # Create frame
+
+00c     movl    RAX, #42        # int
+011     addq    rsp, 16 # Destroy frame
+        popq    rbp
+        testl   rax, [rip + #offset_to_poll_page] # Safepoint: poll for GC
+
+01c     ret
+-->
+              </code>
+            </pre>
+            <p>
+              JDK 7: <a href="https://bugs.openjdk.java.net/browse/JDK-6912065">
+                6912065: final fields in objects need to support inlining optimizations for JSR 292
+              </a>
+              <br/>
+              By default only enabled for <code>java.lang.invoke</code> and <code>sun.invoke</code>.
+            </p>
+          </section>
+        </section>
+
+        <section>
+          <h2 style="text-transform: none;">The <code>@Stable</code> Annotation</h2>
+
+          <ul>
+	    <li>Only available for <code>java.lang.invoke</code> package.</li>
+	    <li>Treat fields as final if they change their value at most once.</li>
+	    <li><code>-XX:+FoldStableValues</code></li>
+	    <li><code>-XX:+UseImplicitStableValues</code></li>
+	    <li><a href="https://bugs.openjdk.java.net/browse/JDK-8001107">8001107: @Stable annotation for constant folding of lazily evaluated variables</a></li>
+	    <li><a href="https://bugs.openjdk.java.net/browse/JDK-8024042">8024042: Add verification support for @Stable into VM</a></li>
+	    <li><a href="https://bugs.openjdk.java.net/browse/JDK-8134758">8134758: Final String field values should be trusted as stable</a></li>
+	  </ul>
+
+        </section>
+
+
+        <section data-background="images/Flammarion.jpg"
+                 data-background-size="60%">
+          &nbsp;
+        </section>
+
+<!--
+        <section>
+          <pre class="big noshadow" data-trim="true">
+            <code class="java" data-trim="true">
+<![CDATA[
+]]>
+            </code>
+          </pre>
+          <br/>
+          <pre class="fragment big console" data-trim="true">
+TestH@15db9742.f = 0
+TestH@15db9742.f = 42
+          </pre>
+
+          <p class="fragment">
+            SEI CERT: <a href="https://www.securecoding.cert.org/confluence/display/java/TSM01-J.+Do+not+let+the+this+reference+escape+during+object+construction?src=contextnavpagetreemode">TSM01-J. Do not let the "this" reference escape during object construction!</a>
+          </p>
+        </section>
+-->
+
+      </div>
+
+    </div>
+
+    <script src="reveal.js/lib/js/head.min.js"></script>
+    <script src="reveal.js/js/reveal.js"></script>
+
+    <script>
+
+      // Full list of configuration options available at:
+      // https://github.com/hakimel/reveal.js#configuration
+      Reveal.initialize({
+        width: 1366,
+        height: 768,
+        controls: true,
+        progress: true,
+        history: true,
+        center: true,
+
+        transition: 'none', // none/fade/slide/convex/concave/zoom
+
+        // Optional reveal.js plugins
+        dependencies: [
+          { src: 'reveal.js/lib/js/classList.js', condition: function() { return !document.body.classList; } },
+          { src: 'reveal.js/plugin/markdown/marked.js', condition: function() { return !!document.querySelector( '[data-markdown]' ); } },
+          { src: 'reveal.js/plugin/markdown/markdown.js', condition: function() { return !!document.querySelector( '[data-markdown]' ); } },
+          { src: 'reveal.js/plugin/highlight/highlight.js', async: true, condition: function() { return !!document.querySelector( 'pre code' ); }, callback: function() { hljs.initHighlightingOnLoad(); } },
+          { src: 'reveal.js/plugin/zoom-js/zoom.js', async: true },
+          { src: 'reveal.js/plugin/notes/notes.js', async: true }
+        ]
+      });
+
+    </script>
+
+  </body>
+</html>
